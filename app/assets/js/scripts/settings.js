@@ -720,6 +720,22 @@ async function resolveModsForUI(){
     document.getElementById('settingsOptModsContent').innerHTML = modStr.optMods
 }
 
+function isNeoForgeFileMod(mdl){
+    const artifactPath = mdl.rawModule.artifact.path
+    return mdl.rawModule.type === Type.File
+        && typeof artifactPath === 'string'
+        && artifactPath.startsWith('neoforge-mods/')
+}
+
+function isConfigurableMod(mdl){
+    const type = mdl.rawModule.type
+    return type === Type.ForgeMod || type === Type.LiteMod || type === Type.LiteLoader || type === Type.FabricMod || isNeoForgeFileMod(mdl)
+}
+
+function getModConfigurationId(mdl){
+    return mdl.mavenComponents == null ? mdl.rawModule.id : mdl.getVersionlessMavenIdentifier()
+}
+
 /**
  * Recursively build the mod UI elements.
  * 
@@ -734,17 +750,21 @@ function parseModulesForUI(mdls, submodules, servConf){
 
     for(const mdl of mdls){
 
-        if(mdl.rawModule.type === Type.ForgeMod || mdl.rawModule.type === Type.LiteMod || mdl.rawModule.type === Type.LiteLoader || mdl.rawModule.type === Type.FabricMod){
+        if(isConfigurableMod(mdl)){
+            const modId = getModConfigurationId(mdl)
+            const versionLabel = mdl.mavenComponents?.version
+                ? `<span class="settingsModVersion">v${mdl.mavenComponents.version}</span>`
+                : ''
 
             if(mdl.getRequired().value){
 
-                reqMods += `<div id="${mdl.getVersionlessMavenIdentifier()}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" enabled>
+                reqMods += `<div id="${modId}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" enabled>
                     <div class="settingsModContent">
                         <div class="settingsModMainWrapper">
                             <div class="settingsModStatus"></div>
                             <div class="settingsModDetails">
                                 <span class="settingsModName">${mdl.rawModule.name}</span>
-                                <span class="settingsModVersion">v${mdl.mavenComponents.version}</span>
+                                ${versionLabel}
                             </div>
                         </div>
                         <label class="toggleSwitch" reqmod>
@@ -753,31 +773,31 @@ function parseModulesForUI(mdls, submodules, servConf){
                         </label>
                     </div>
                     ${mdl.subModules.length > 0 ? `<div class="settingsSubModContainer">
-                        ${Object.values(parseModulesForUI(mdl.subModules, true, servConf[mdl.getVersionlessMavenIdentifier()])).join('')}
+                        ${Object.values(parseModulesForUI(mdl.subModules, true, servConf[modId])).join('')}
                     </div>` : ''}
                 </div>`
 
             } else {
 
-                const conf = servConf[mdl.getVersionlessMavenIdentifier()]
+                const conf = servConf[modId]
                 const val = typeof conf === 'object' ? conf.value : conf
 
-                optMods += `<div id="${mdl.getVersionlessMavenIdentifier()}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" ${val ? 'enabled' : ''}>
+                optMods += `<div id="${modId}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" ${val ? 'enabled' : ''}>
                     <div class="settingsModContent">
                         <div class="settingsModMainWrapper">
                             <div class="settingsModStatus"></div>
                             <div class="settingsModDetails">
                                 <span class="settingsModName">${mdl.rawModule.name}</span>
-                                <span class="settingsModVersion">v${mdl.mavenComponents.version}</span>
+                                ${versionLabel}
                             </div>
                         </div>
                         <label class="toggleSwitch">
-                            <input type="checkbox" formod="${mdl.getVersionlessMavenIdentifier()}" ${val ? 'checked' : ''}>
+                            <input type="checkbox" formod="${modId}" ${val ? 'checked' : ''}>
                             <span class="toggleSwitchSlider"></span>
                         </label>
                     </div>
                     ${mdl.subModules.length > 0 ? `<div class="settingsSubModContainer">
-                        ${Object.values(parseModulesForUI(mdl.subModules, true, conf.mods)).join('')}
+                        ${Object.values(parseModulesForUI(mdl.subModules, true, conf?.mods)).join('')}
                     </div>` : ''}
                 </div>`
 

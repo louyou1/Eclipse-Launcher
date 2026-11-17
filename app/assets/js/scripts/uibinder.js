@@ -147,6 +147,22 @@ function onDistroRefresh(data){
  * 
  * @param {Object} data The distro index object.
  */
+function isNeoForgeFileMod(mdl){
+    const artifactPath = mdl.rawModule.artifact.path
+    return mdl.rawModule.type === Type.File
+        && typeof artifactPath === 'string'
+        && artifactPath.startsWith('neoforge-mods/')
+}
+
+function isConfigurableMod(mdl){
+    const type = mdl.rawModule.type
+    return type === Type.ForgeMod || type === Type.LiteMod || type === Type.LiteLoader || type === Type.FabricMod || isNeoForgeFileMod(mdl)
+}
+
+function getModConfigurationId(mdl){
+    return mdl.mavenComponents == null ? mdl.rawModule.id : mdl.getVersionlessMavenIdentifier()
+}
+
 function syncModConfigurations(data){
 
     const syncedCfgs = []
@@ -163,11 +179,9 @@ function syncModConfigurations(data){
             const mods = {}
 
             for(let mdl of mdls){
-                const type = mdl.rawModule.type
-
-                if(type === Type.ForgeMod || type === Type.LiteMod || type === Type.LiteLoader || type === Type.FabricMod){
+                if(isConfigurableMod(mdl)){
                     if(!mdl.getRequired().value){
-                        const mdlID = mdl.getVersionlessMavenIdentifier()
+                        const mdlID = getModConfigurationId(mdl)
                         if(modsOld[mdlID] == null){
                             mods[mdlID] = scanOptionalSubModules(mdl.subModules, mdl)
                         } else {
@@ -175,7 +189,7 @@ function syncModConfigurations(data){
                         }
                     } else {
                         if(mdl.subModules.length > 0){
-                            const mdlID = mdl.getVersionlessMavenIdentifier()
+                            const mdlID = getModConfigurationId(mdl)
                             const v = scanOptionalSubModules(mdl.subModules, mdl)
                             if(typeof v === 'object'){
                                 if(modsOld[mdlID] == null){
@@ -199,15 +213,14 @@ function syncModConfigurations(data){
             const mods = {}
 
             for(let mdl of mdls){
-                const type = mdl.rawModule.type
-                if(type === Type.ForgeMod || type === Type.LiteMod || type === Type.LiteLoader || type === Type.FabricMod){
+                if(isConfigurableMod(mdl)){
                     if(!mdl.getRequired().value){
-                        mods[mdl.getVersionlessMavenIdentifier()] = scanOptionalSubModules(mdl.subModules, mdl)
+                        mods[getModConfigurationId(mdl)] = scanOptionalSubModules(mdl.subModules, mdl)
                     } else {
                         if(mdl.subModules.length > 0){
                             const v = scanOptionalSubModules(mdl.subModules, mdl)
                             if(typeof v === 'object'){
-                                mods[mdl.getVersionlessMavenIdentifier()] = v
+                                mods[getModConfigurationId(mdl)] = v
                             }
                         }
                     }
@@ -253,17 +266,16 @@ function scanOptionalSubModules(mdls, origin){
         const mods = {}
 
         for(let mdl of mdls){
-            const type = mdl.rawModule.type
             // Optional types.
-            if(type === Type.ForgeMod || type === Type.LiteMod || type === Type.LiteLoader || type === Type.FabricMod){
+            if(isConfigurableMod(mdl)){
                 // It is optional.
                 if(!mdl.getRequired().value){
-                    mods[mdl.getVersionlessMavenIdentifier()] = scanOptionalSubModules(mdl.subModules, mdl)
+                    mods[getModConfigurationId(mdl)] = scanOptionalSubModules(mdl.subModules, mdl)
                 } else {
                     if(mdl.hasSubModules()){
                         const v = scanOptionalSubModules(mdl.subModules, mdl)
                         if(typeof v === 'object'){
-                            mods[mdl.getVersionlessMavenIdentifier()] = v
+                            mods[getModConfigurationId(mdl)] = v
                         }
                     }
                 }

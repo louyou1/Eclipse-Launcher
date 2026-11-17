@@ -15,12 +15,8 @@ const logger = LoggerUtil.getLogger('ProcessBuilder')
 
 
 /**
- * Only forge and fabric are top level mod loaders.
- * 
- * Forge 1.13+ launch logic is similar to fabrics, for now using usingFabricLoader flag to
- * change minor details when needed.
- * 
- * Rewrite of this module may be needed in the future.
+ * Forge, NeoForge, and Fabric are represented by top-level loader modules.
+ * Forge 1.13+ and NeoForge use version manifests; Fabric has a separate mod argument path.
  */
 class ProcessBuilder {
 
@@ -39,16 +35,18 @@ class ProcessBuilder {
 
         this.usingLiteLoader = false
         this.usingFabricLoader = false
+        this.usingNeoForgeLoader = false
         this.llPath = null
     }
 
     /**
-     * Remove manually added mod archives from this server instance before launch.
-     * Server-managed mods are stored separately in the launcher's common directory.
+     * Remove manually added mod archives while preserving the server-managed NeoForge files.
      */
-    removeManualMods(){
+    removeManualMods(enabledMods = []){
         const modsDir = path.join(this.gameDir, 'mods')
-        if(!fs.existsSync(modsDir) || !fs.statSync(modsDir).isDirectory()){
+        if(this.usingNeoForgeLoader){
+            fs.ensureDirSync(modsDir)
+        } else if(!fs.existsSync(modsDir) || !fs.statSync(modsDir).isDirectory()){
             return 0
         }
 
@@ -66,6 +64,16 @@ class ProcessBuilder {
         }
 
         removeModArchives(modsDir)
+        if(this.usingNeoForgeLoader){
+            for(const mod of enabledMods.filter(mdl => this.isNeoForgeModModule(mdl))){
+                if(!fs.existsSync(mod.getPath())){
+                    throw new Error(`The selected NeoForge mod is missing: ${mod.rawModule.name}`)
+                }
+                const namespace = mod.rawModule.artifact.path.split('/')[1]
+                const fileName = `${namespace}-${path.basename(mod.rawModule.artifact.path)}`
+                fs.copyFileSync(mod.getPath(), path.join(modsDir, fileName))
+            }
+        }
         if(removedCount > 0){
             logger.info(`Removed ${removedCount} manually added mod archive(s) from`, modsDir)
         }
@@ -126,6 +134,12 @@ class ProcessBuilder {
         logger.info('Using liteloader:', this.usingLiteLoader)
         this.usingFabricLoader = this.server.modules.some(mdl => mdl.rawModule.type === Type.Fabric)
         logger.info('Using fabric loader:', this.usingFabricLoader)
+        this.usingNeoForgeLoader = this.server.modules.some(mdl => {
+            const rawModule = mdl.rawModule
+            return rawModule.type === Type.ForgeHosted
+                && rawModule.id.startsWith('net.neoforged:neoforge:')
+        })
+        logger.info('Using NeoForge loader:', this.usingNeoForgeLoader)
         const modObj = this.resolveModConfiguration(ConfigManager.getModConfiguration(this.server.rawServer.id).mods, this.server.modules)
         
         // Mod list below 1.13
@@ -151,7 +165,7 @@ class ProcessBuilder {
 
         logger.info('Launch Arguments:', loggableArgs)
 
-        this.removeManualMods()
+        this.removeManualMods(modObj.fMods)
 
         const launchDetached = ConfigManager.getLaunchDetached()
         let child
@@ -280,19 +294,21 @@ class ProcessBuilder {
 
         for(let mdl of mdls){
             const type = mdl.rawModule.type
-            if(type === Type.ForgeMod || type === Type.LiteMod || type === Type.LiteLoader || type === Type.FabricMod){
+            const isNeoForgeMod = this.isNeoForgeModModule(mdl)
+            if(type === Type.ForgeMod || type === Type.LiteMod || type === Type.LiteLoader || type === Type.FabricMod || isNeoForgeMod){
+                const modConfigKey = this.getModConfigurationKey(mdl)
                 const o = !mdl.getRequired().value
-                const e = ProcessBuilder.isModEnabled(modCfg[mdl.getVersionlessMavenIdentifier()], mdl.getRequired())
+                const e = ProcessBuilder.isModEnabled(modCfg[modConfigKey], mdl.getRequired())
                 if(!o || (o && e)){
                     if(mdl.subModules.length > 0){
-                        const v = this.resolveModConfiguration(modCfg[mdl.getVersionlessMavenIdentifier()].mods, mdl.subModules)
+                        const v = this.resolveModConfiguration(modCfg[modConfigKey].mods, mdl.subModules)
                         fMods = fMods.concat(v.fMods)
                         lMods = lMods.concat(v.lMods)
                         if(type === Type.LiteLoader){
                             continue
                         }
                     }
-                    if(type === Type.ForgeMod || type === Type.FabricMod){
+                    if(type === Type.ForgeMod || type === Type.FabricMod || isNeoForgeMod){
                         fMods.push(mdl)
                     } else {
                         lMods.push(mdl)
@@ -305,6 +321,18 @@ class ProcessBuilder {
             fMods,
             lMods
         }
+    }
+
+    isNeoForgeModModule(mdl){
+        const artifactPath = mdl.rawModule.artifact.path
+        return this.usingNeoForgeLoader
+            && mdl.rawModule.type === Type.File
+            && typeof artifactPath === 'string'
+            && artifactPath.startsWith('neoforge-mods/')
+    }
+
+    getModConfigurationKey(mdl){
+        return mdl.mavenComponents == null ? mdl.rawModule.id : mdl.getVersionlessMavenIdentifier()
     }
 
     _lteMinorVersion(version) {
@@ -401,6 +429,12 @@ class ProcessBuilder {
      * @param {Array.<Object>} mods An array of mods to add to the mod list.
      */
     constructModList(mods) {
+        // Modern NeoForge discovers required mods from the instance mods/ directory.
+        // These files arrive as regular File modules from the Eclipse GitHub repository.
+        if(this.usingNeoForgeLoader){
+            return []
+        }
+
         const writeBuffer = mods.map(mod => {
             return this.usingFabricLoader ? mod.getPath() : mod.getExtensionlessMavenIdentifier()
         }).join('\n')
