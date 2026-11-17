@@ -3,7 +3,7 @@ productName: 'Eclipse Launcher'
 publish:
   provider: github
   owner: louyou1
-  repo: Paradis-Launcher
+  repo: Eclipse-Launcher
   releaseType: release
 artifactName: 'Eclipse-Launcher-setup-${version}.${ext}'
 

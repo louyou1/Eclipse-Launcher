@@ -202,7 +202,7 @@ downloadingFiles = "Téléchargement des fichiers…"
 errorDuringFileDownloadTitle = "Erreur lors du téléchargement des fichiers"
 preparingToLaunch = "Préparation au lancement…"
 launchingGame = "Lancement du jeu…"
-launchWrapperNotDownloaded = 'Le fichier principal LaunchWrapper n’a pas pu être téléchargé correctement. Le jeu ne peut donc pas démarrer.<br><br>Pour résoudre ce problème, désactivez temporairement votre antivirus puis relancez le jeu.<br><br>Si vous le pouvez, <a href="https://github.com/dscalzi/HeliosLauncher/issues">signalez le problème</a> en indiquant votre antivirus. Nous vous contacterons.'
+launchWrapperNotDownloaded = 'Le fichier principal LaunchWrapper n’a pas pu être téléchargé correctement. Le jeu ne peut donc pas démarrer.<br><br>Pour résoudre ce problème, désactivez temporairement votre antivirus puis relancez le jeu.<br><br>Si vous le pouvez, <a href="https://github.com/louyou1/Eclipse-Launcher/issues">signalez le problème</a> en indiquant votre antivirus. Nous vous contacterons.'
 doneEnjoyServer = "C'est prêt. Bon jeu !"
 checkConsoleForDetails = "Consultez la console (CTRL + Maj + i) pour plus de détails."
 

@@ -5,9 +5,9 @@
   "description": "Launcher Minecraft du serveur Eclipse",
   "author": "Daniel Scalzi (https://github.com/dscalzi/) modif by lou-you",
   "license": "UNLICENSED",
-  "homepage": "https://github.com/louyou1/Paradis-Launcher",
+  "homepage": "https://github.com/louyou1/Eclipse-Launcher",
   "bugs": {
-    "url": "https://github.com/louyou1/Paradis-Launcher/issues"
+    "url": "https://github.com/louyou1/Eclipse-Launcher/issues"
   },
   "private": true,
   "main": "index.js",
@@ -51,6 +51,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/louyou1/Paradis-Launcher.git"
+    "url": "git+https://github.com/louyou1/Eclipse-Launcher.git"
   }
 }
