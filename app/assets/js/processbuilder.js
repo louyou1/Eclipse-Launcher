@@ -1078,7 +1078,16 @@ class ProcessBuilder {
         for(let mdl of mdls){
             const type = mdl.rawModule.type
             if(type === Type.ForgeHosted || type === Type.Fabric || type === Type.Library){
-                libs[mdl.getVersionlessMavenIdentifier()] = mdl.getPath()
+                const isNeoForgeHostedModule = this.usingNeoForgeLoader
+                    && type === Type.ForgeHosted
+                    && mdl.rawModule.id.startsWith('net.neoforged:neoforge:')
+
+                // The installer-generated client jar replaces NeoForge's universal jar
+                // at runtime. Both expose the JPMS module "neoforge", so putting both
+                // on the classpath makes ModLauncher fail while building its game layer.
+                if(!isNeoForgeHostedModule){
+                    libs[mdl.getVersionlessMavenIdentifier()] = mdl.getPath()
+                }
                 if(mdl.subModules.length > 0){
                     const res = this._resolveModuleLibraries(mdl)
                     libs = {...libs, ...res}
