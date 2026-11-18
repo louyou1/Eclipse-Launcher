@@ -69,15 +69,104 @@ class ProcessBuilder {
                 if(!fs.existsSync(mod.getPath())){
                     throw new Error(`The selected NeoForge mod is missing: ${mod.rawModule.name}`)
                 }
-                const namespace = mod.rawModule.artifact.path.split('/')[1]
-                const fileName = `${namespace}-${path.basename(mod.rawModule.artifact.path)}`
-                fs.copyFileSync(mod.getPath(), path.join(modsDir, fileName))
+                fs.copyFileSync(mod.getPath(), path.join(modsDir, path.basename(mod.getPath())))
             }
         }
         if(removedCount > 0){
             logger.info(`Removed ${removedCount} manually added mod archive(s) from`, modsDir)
         }
         return removedCount
+    }
+
+    /**
+     * NeoForge's installer processors create the mapped and patched client jar
+     * required by its early display layer. Prepare it in the shared libraries
+     * directory before building the game's classpath.
+     */
+    async prepare(){
+        const neoForgeModule = this.server.modules.find(mdl => {
+            const rawModule = mdl.rawModule
+            return rawModule.type === Type.ForgeHosted
+                && rawModule.id.startsWith('net.neoforged:neoforge:')
+        })
+        this.usingNeoForgeLoader = neoForgeModule != null
+        if(!neoForgeModule){
+            return
+        }
+
+        const version = neoForgeModule.mavenComponents.version
+        const clientJarPath = path.join(
+            this.libPath,
+            'net', 'neoforged', 'neoforge', version,
+            `neoforge-${version}-client.jar`
+        )
+        if(this.hasNeoForgeClientJar(clientJarPath)){
+            return
+        }
+        fs.removeSync(clientJarPath)
+
+        const installerModule = neoForgeModule.subModules.find(mdl => {
+            return mdl.rawModule.type === Type.Library
+                && mdl.rawModule.id === `net.neoforged:neoforge:${version}:installer`
+        })
+        if(!installerModule || !fs.existsSync(installerModule.getPath())){
+            throw new Error('The NeoForge installer is missing. Repair the Eclipse files and try again.')
+        }
+
+        const profilesPath = path.join(this.commonDir, 'launcher_profiles.json')
+        if(!fs.existsSync(profilesPath)){
+            fs.writeJsonSync(profilesPath, { profiles: {}, settings: {} }, { spaces: 2 })
+        }
+
+        logger.info(`Preparing the NeoForge ${version} client files.`)
+        await new Promise((resolve, reject) => {
+            const installer = child_process.spawn(
+                ConfigManager.getJavaExecutable(this.server.rawServer.id),
+                ['-Djava.awt.headless=true', '-jar', installerModule.getPath(), '--installClient', this.commonDir],
+                {
+                    cwd: this.commonDir,
+                    windowsHide: true,
+                    stdio: ['ignore', 'pipe', 'pipe']
+                }
+            )
+            installer.stdout.on('data', data => {
+                const output = data.toString().trim()
+                if(output){
+                    logger.info('[NeoForge installer]', output)
+                }
+            })
+            installer.stderr.on('data', data => {
+                const output = data.toString().trim()
+                if(output){
+                    logger.warn('[NeoForge installer]', output)
+                }
+            })
+            installer.once('error', reject)
+            installer.once('close', code => {
+                if(code === 0){
+                    resolve()
+                } else {
+                    reject(new Error(`NeoForge client preparation failed with exit code ${code}.`))
+                }
+            })
+        })
+
+        if(!this.hasNeoForgeClientJar(clientJarPath)){
+            throw new Error('NeoForge did not create the patched client jar required to start Minecraft.')
+        }
+    }
+
+    hasNeoForgeClientJar(clientJarPath){
+        if(!fs.existsSync(clientJarPath)){
+            return false
+        }
+        try {
+            const clientJar = new AdmZip(clientJarPath)
+            return clientJar.getEntry('net/minecraft/client/gui/screens/LoadingOverlay.class') != null
+        } catch(err) {
+            logger.warn('The cached NeoForge client jar is invalid and will be rebuilt.', err)
+            return false
+        }
     }
 
     /**
@@ -324,11 +413,14 @@ class ProcessBuilder {
     }
 
     isNeoForgeModModule(mdl){
-        const artifactPath = mdl.rawModule.artifact.path
-        return this.usingNeoForgeLoader
-            && mdl.rawModule.type === Type.File
-            && typeof artifactPath === 'string'
-            && artifactPath.startsWith('neoforge-mods/')
+        if(!this.usingNeoForgeLoader){
+            return false
+        }
+        const rawModule = mdl.rawModule
+        return (rawModule.type === Type.ForgeMod && rawModule.id.startsWith('eclipse.neoforge:'))
+            || (rawModule.type === Type.File
+                && typeof rawModule.artifact.path === 'string'
+                && rawModule.artifact.path.startsWith('neoforge-mods/'))
     }
 
     getModConfigurationKey(mdl){
@@ -430,7 +522,7 @@ class ProcessBuilder {
      */
     constructModList(mods) {
         // Modern NeoForge discovers required mods from the instance mods/ directory.
-        // These files arrive as regular File modules from the Eclipse GitHub repository.
+        // The launcher stages enabled files there from the shared modstore at launch.
         if(this.usingNeoForgeLoader){
             return []
         }
@@ -806,11 +898,24 @@ class ProcessBuilder {
     classpathArg(mods, tempNativePath){
         let cpArgs = []
 
-        if(!mcVersionAtLeast('1.17', this.server.rawServer.minecraftVersion) || this.usingFabricLoader) {
-            // Add the version.jar to the classpath.
-            // Must not be added to the classpath for Forge 1.17+.
+        if(!mcVersionAtLeast('1.17', this.server.rawServer.minecraftVersion) || this.usingFabricLoader || this.usingNeoForgeLoader) {
+            // Keep the vanilla client jar available to the loader, as with the official launch profiles.
             const version = this.vanillaManifest.id
             cpArgs.push(path.join(this.commonDir, 'versions', version, version + '.jar'))
+        }
+
+        if(this.usingNeoForgeLoader){
+            const neoForgeModule = this.server.modules.find(mdl => {
+                const rawModule = mdl.rawModule
+                return rawModule.type === Type.ForgeHosted
+                    && rawModule.id.startsWith('net.neoforged:neoforge:')
+            })
+            const version = neoForgeModule.mavenComponents.version
+            cpArgs.push(path.join(
+                this.libPath,
+                'net', 'neoforged', 'neoforge', version,
+                `neoforge-${version}-client.jar`
+            ))
         }
         
 

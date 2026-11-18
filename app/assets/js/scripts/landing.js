@@ -613,6 +613,8 @@ async function dlAsync(login = true) {
         }
 
         try {
+            await pb.prepare()
+
             // Build Minecraft process.
             proc = pb.build()
 
