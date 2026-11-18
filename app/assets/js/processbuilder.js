@@ -642,6 +642,32 @@ class ProcessBuilder {
             }
         }
 
+        if(this.usingNeoForgeLoader){
+            const neoForgeModule = this.server.modules.find(mdl => {
+                const rawModule = mdl.rawModule
+                return rawModule.type === Type.ForgeHosted
+                    && rawModule.id.startsWith('net.neoforged:neoforge:')
+            })
+            if(neoForgeModule){
+                // The patched client jar must stay on java.class.path for NeoForge's
+                // early display, but its automatic module name is "neoforge" too.
+                // FML loads the universal jar as the actual NeoForge module, so keep
+                // the client jar out of BootstrapLauncher's JPMS layer to avoid a
+                // duplicate module across the bootstrap and game layers.
+                const clientJarPrefix = `neoforge-${neoForgeModule.mavenComponents.version}-client.jar`
+                const ignoreListIndex = args.findIndex(arg => typeof arg === 'string' && arg.startsWith('-DignoreList='))
+                if(ignoreListIndex > -1){
+                    const ignoreList = args[ignoreListIndex].substring('-DignoreList='.length).split(',').filter(Boolean)
+                    if(!ignoreList.includes(clientJarPrefix)){
+                        ignoreList.push(clientJarPrefix)
+                    }
+                    args[ignoreListIndex] = `-DignoreList=${ignoreList.join(',')}`
+                } else {
+                    args.push(`-DignoreList=${clientJarPrefix}`)
+                }
+            }
+        }
+
         //args.push('-Dlog4j.configurationFile=D:\\WesterosCraft\\game\\common\\assets\\log_configs\\client-1.12.xml')
 
         // Java Arguments
