@@ -898,13 +898,15 @@ class ProcessBuilder {
     classpathArg(mods, tempNativePath){
         let cpArgs = []
 
-        if(!mcVersionAtLeast('1.17', this.server.rawServer.minecraftVersion) || this.usingFabricLoader || this.usingNeoForgeLoader) {
-            // Keep the vanilla client jar available to the loader, as with the official launch profiles.
+        if(!mcVersionAtLeast('1.17', this.server.rawServer.minecraftVersion) || this.usingFabricLoader) {
+            // Add the vanilla version jar for legacy versions and Fabric.
             const version = this.vanillaManifest.id
             cpArgs.push(path.join(this.commonDir, 'versions', version, version + '.jar'))
         }
 
         if(this.usingNeoForgeLoader){
+            // NeoForge uses its patched, named client jar. Adding the raw client jar too
+            // creates duplicate JPMS modules and makes module resolution fail.
             const neoForgeModule = this.server.modules.find(mdl => {
                 const rawModule = mdl.rawModule
                 return rawModule.type === Type.ForgeHosted
